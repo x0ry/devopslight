@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DevOpsLight</title>
+<style>
+  :root{
+    --ado-blue:#0078d4;
+    --ado-blue-dark:#106ebe;
+    --ado-blue-light:#deecf9;
+    --bg:#faf9f8;
+    --panel:#ffffff;
+    --border:#edebe9;
+    --border-strong:#c8c6c4;
+    --text:#323130;
+    --text-secondary:#605e5c;
+    --text-tertiary:#a19f9d;
+    --danger:#a4262c;
+    --shadow:0 1.6px 3.6px rgba(0,0,0,.13),0 0.3px 0.9px rgba(0,0,0,.1);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:"Segoe UI","Segoe UI Web",-apple-system,BlinkMacSystemFont,Tahoma,Arial,sans-serif;
+    color:var(--text);
+    background:var(--bg);
+    font-size:13px;
+    line-height:1.45;
+  }
+  ::selection{background:var(--ado-blue-light);}
+  button{font-family:inherit;}
+  #app{
+    display:flex;flex-direction:column;
+    max-width:1800px;margin:0 auto;width:100%;
+    min-height:100vh;min-height:100dvh;
+    background:var(--panel);box-shadow:0 0 0 1px var(--border);
+  }
+
+  /* ---------- title bar ---------- */
+  .titlebar{flex:none;padding:14px 24px 12px 24px;border-bottom:1px solid var(--border);}
+  .title-input{
+    display:block;width:100%;border:1px solid transparent;outline:none;background:transparent;
+    font-family:inherit;font-size:20px;font-weight:600;color:var(--text);
+    padding:8px 10px;border-radius:2px;
+  }
+  .title-input::placeholder{color:var(--text-tertiary);font-weight:400;}
+  .title-input:hover{border-color:var(--border);}
+  .title-input:focus{border-color:var(--ado-blue);background:#fff;box-shadow:0 0 0 1px var(--ado-blue) inset;}
+
+  /* ---------- import/export/save-status bar, between editor and preview ---------- */
+  .filebar{
+    flex:none;
+    display:flex;align-items:center;justify-content:flex-end;gap:12px;
+    padding:8px 12px;border:1px solid var(--border);border-radius:2px;background:#fbfbfb;flex-wrap:wrap;
+  }
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:2px;
+    border:1px solid var(--border-strong);background:#fff;color:var(--text);font-size:12px;cursor:pointer;
+  }
+  .btn:hover{background:#f3f2f1;}
+  .btn:disabled{opacity:.5;cursor:default;}
+  .btn.btn-primary{background:var(--ado-blue);border-color:var(--ado-blue);color:#fff;}
+  .btn.btn-primary:hover{background:var(--ado-blue-dark);border-color:var(--ado-blue-dark);}
+  .btn.btn-primary:disabled{background:var(--ado-blue);opacity:.45;}
+  .save-status{font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px;}
+  .save-status .dirty-dot{width:7px;height:7px;border-radius:50%;background:#d29200;display:none;}
+  .save-status.is-dirty .dirty-dot{display:inline-block;}
+  .filename-pill{font-size:11px;color:var(--text-tertiary);}
+
+  /* ---------- tabs ---------- */
+  .tabs{flex:none;display:flex;gap:2px;padding:0 24px;border-bottom:1px solid var(--border);}
+  .tab{
+    padding:10px 16px;font-size:13px;color:var(--text-secondary);border-bottom:2px solid transparent;
+    cursor:pointer;user-select:none;
+  }
+  .tab.active{color:var(--ado-blue);border-bottom-color:var(--ado-blue);font-weight:600;}
+  .tab:hover:not(.active){color:var(--text);}
+
+  /* ---------- editor ---------- */
+  .editor-section{flex:1;display:flex;flex-direction:column;min-height:0;padding:16px 24px 20px 24px;}
+  .field-label{flex:none;font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;}
+
+  #editorScreen{flex:1;display:flex;flex-direction:column;min-height:0;}
+
+  /* always split: bordered source editor on top, borderless rendered preview below -
+     the preview deliberately has no box around it so it reads as page content, not a text field */
+  .md-body{flex:1;display:flex;flex-direction:column;min-height:0;gap:16px;}
+
+  .md-editor{position:relative;flex:none;display:flex;flex-direction:column;border:1px solid var(--border-strong);border-radius:2px;background:#fff;}
+  .save-fab{position:absolute;right:24px;bottom:14px;z-index:5;box-shadow:var(--shadow);}
+  .md-toolbar{
+    flex:none;
+    display:flex;align-items:center;gap:2px;padding:6px 8px;border-bottom:1px solid var(--border);
+    flex-wrap:wrap;background:#faf9f8;
+  }
+  .md-tool-btn{
+    border:none;background:transparent;min-width:32px;height:32px;border-radius:2px;cursor:pointer;
+    font-size:13px;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;padding:0 6px;
+  }
+  .md-tool-btn:hover{background:#e1dfdd;color:var(--text);}
+  .md-tool-btn.bold-glyph{font-weight:700;}
+  .md-tool-btn.italic-glyph{font-style:italic;}
+  .md-tool-btn.strike-glyph{text-decoration:line-through;}
+  .md-tool-sep{width:1px;align-self:stretch;background:var(--border-strong);margin:4px 4px;}
+
+  .md-source-wrap{position:relative;display:flex;}
+  #source{
+    min-width:0;
+    width:100%;border:none;outline:none;
+    font-family:Consolas,"Cascadia Mono","SFMono-Regular",Menlo,monospace;font-size:13px;
+    padding:14px;padding-bottom:56px;color:var(--text);line-height:1.6;background:transparent;
+    height:480px;min-height:160px;max-height:80vh;resize:vertical;overflow:auto;
+  }
+  .drop-hint{
+    position:absolute;inset:0;background:rgba(0,120,212,.08);border:2px dashed var(--ado-blue);
+    display:none;align-items:center;justify-content:center;color:var(--ado-blue-dark);font-size:13px;font-weight:600;pointer-events:none;
+  }
+  .drop-hint.show{display:flex;}
+
+  .md-preview{flex:1;min-height:0;padding:4px 16px 4px 17px;overflow:auto;border:none;background:transparent;}
+  .md-preview:empty::before, .md-preview.empty::before{content:"Nothing to preview yet.";color:var(--text-tertiary);font-style:italic;}
+
+  /* rendered markdown — block elements carry no vertical margin of their own;
+     spacing between them comes only from blank lines in the source (each one
+     becomes a <br>, see parseMarkdown), so the gap you type is the gap you get. */
+  .md-preview h1,.md-preview h2,.md-preview h3,.md-preview h4{font-weight:600;margin:0;line-height:1.3;}
+  .md-preview h1{font-size:1.7em;border-bottom:1px solid var(--border);padding-bottom:.25em;}
+  .md-preview h2{font-size:1.4em;border-bottom:1px solid var(--border);padding-bottom:.2em;}
+  .md-preview h3{font-size:1.2em;}
+  .md-preview h4{font-size:1.05em;}
+  .md-preview p{margin:0;}
+  .md-preview a{color:var(--ado-blue);text-decoration:none;}
+  .md-preview a:hover{text-decoration:underline;}
+  .md-preview img{max-width:100%;border-radius:2px;border:1px solid var(--border);margin:.4em 0;}
+  .md-preview code{background:#f3f2f1;border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-family:Consolas,Menlo,monospace;font-size:.92em;}
+  .md-preview pre{background:#f6f6f6;border:1px solid var(--border);border-radius:3px;padding:10px 12px;overflow:auto;}
+  .md-preview pre code{border:none;background:none;padding:0;}
+  .md-preview blockquote{border-left:3px solid var(--border-strong);margin:0;padding:2px 14px;color:var(--text-secondary);}
+  .md-preview ul,.md-preview ol{margin:0;padding-left:1.7em;}
+  .md-preview li{margin:.25em 0;}
+  .md-preview li.task-item{list-style:none;margin-left:-1.4em;}
+  .md-preview li.task-item input{margin-right:6px;}
+  .md-preview hr{border:none;border-top:1px solid var(--border-strong);margin:0;}
+  .md-preview table{border-collapse:collapse;margin:0;font-size:.95em;}
+  .md-preview th,.md-preview td{border:1px solid var(--border-strong);padding:5px 10px;}
+  .md-preview th{background:#f3f2f1;font-weight:600;}
+
+  .editor-footer{flex:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-tertiary);}
+
+  [hidden]{display:none!important;}
+
+  .toast{
+    position:fixed;bottom:20px;right:20px;background:#323130;color:#fff;padding:10px 16px;
+    border-radius:3px;font-size:12.5px;box-shadow:var(--shadow);opacity:0;transform:translateY(6px);
+    transition:opacity .18s ease,transform .18s ease;pointer-events:none;z-index:50;
+  }
+  .toast.show{opacity:1;transform:translateY(0);}
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 640px){
+    .filebar{padding:8px;gap:8px;justify-content:center;}
+    .btn{padding:8px 12px;}
+    .tabs{padding:0 14px;}
+    .tab{padding:10px 12px;}
+    .editor-section{padding:10px 12px 14px 12px;}
+    .md-toolbar{padding:6px;gap:1px;}
+    .md-tool-btn{min-width:38px;height:38px;font-size:14px;}
+    .md-preview{padding:12px 14px;}
+    #source{padding:12px;height:320px;}
+    .editor-footer{flex-wrap:wrap;}
+  }
+  @media (hover: none) and (pointer: coarse){
+    .md-tool-btn{min-width:38px;height:38px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="titlebar">
+    <input type="text" id="titleInput" class="title-input" placeholder="Title this task..." autocomplete="off">
+  </div>
+
+  <div class="tabs">
+    <div class="tab active">Details</div>
+    <div class="tab" id="historyTab">History</div>
+  </div>
+
+  <div id="detailsPane" class="editor-section">
+    <div id="editorScreen">
+      <div class="md-body">
+        <div class="md-editor">
+          <div class="md-toolbar">
+            <button class="md-tool-btn bold-glyph" data-cmd="bold" title="Bold (Ctrl+B)">B</button>
+            <button class="md-tool-btn italic-glyph" data-cmd="italic" title="Italic (Ctrl+I)">I</button>
+            <button class="md-tool-btn strike-glyph" data-cmd="strike" title="Strikethrough">S</button>
+            <div class="md-tool-sep"></div>
+            <button class="md-tool-btn" data-cmd="h1" title="Heading 1">H1</button>
+            <button class="md-tool-btn" data-cmd="h2" title="Heading 2">H2</button>
+            <button class="md-tool-btn" data-cmd="quote" title="Quote">&ldquo;</button>
+            <button class="md-tool-btn" data-cmd="code" title="Code">&lt;/&gt;</button>
+            <div class="md-tool-sep"></div>
+            <button class="md-tool-btn" data-cmd="link" title="Link (Ctrl+K)">🔗</button>
+            <button class="md-tool-btn" data-cmd="image" title="Insert image">🖼️</button>
+            <button class="md-tool-btn" data-cmd="ul" title="Bulleted list">☰</button>
+            <button class="md-tool-btn" data-cmd="ol" title="Numbered list">1.</button>
+            <button class="md-tool-btn" data-cmd="task" title="Checklist">☑</button>
+            <button class="md-tool-btn" data-cmd="table" title="Table">▦</button>
+            <button class="md-tool-btn" data-cmd="hr" title="Horizontal rule">―</button>
+          </div>
+
+          <div class="md-source-wrap">
+            <textarea id="source" placeholder="Write a description, add steps, paste a screenshot..."></textarea>
+            <div class="drop-hint" id="dropHint">Drop image to embed</div>
+          </div>
+
+          <button class="btn btn-primary save-fab" id="saveBtn">💾 Save</button>
+        </div>
+
+        <div class="filebar">
+          <span class="filename-pill" id="filenamePill"></span>
+          <button class="btn" id="importBtn" title="Load a .md file's text in">Import .md</button>
+          <button class="btn" id="exportBtn" title="Download the current text as task.md">Export .md</button>
+          <div class="save-status" id="saveStatus"><span class="dirty-dot"></span><span id="saveStatusText">Not saved yet</span></div>
+        </div>
+
+        <div class="md-preview" id="preview"></div>
+      </div>
+      <div class="editor-footer">
+        <span id="wordCount">0 words</span>
+        <span id="hintText">Paste or drag an image directly into the box &mdash; it's embedded straight into the file, no attachments folder needed.</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="historyPane" class="editor-section" hidden>
+    <div class="field-label">Raw file preview</div>
+    <pre id="historyRaw" style="background:#f6f6f6;border:1px solid var(--border);border-radius:2px;padding:14px;overflow:auto;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;"></pre>
+    <div style="margin-top:14px;font-size:11.5px;color:var(--text-tertiary);">
+      Last changed <span id="updatedStamp">&mdash;</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     PER-COPY STORAGE NAMESPACE
+     Every copy of this HTML file (a different folder, or just a
+     renamed file) is meant to be its own independent story/task —
+     but file:// pages are all same-origin in the browser, so a fixed
+     localStorage key would silently share one saved doc across every
+     copy. Keying off the page's own path means a fresh copy (new
+     path) starts blank, while re-opening the same file/location keeps
+     picking up where it left off.
+  ============================================================ */
+  var STORAGE_NS = (function(){
+    try{ return encodeURIComponent(location.pathname + location.search); }
+    catch(e){ return 'default'; }
+  }());
+  var DISPLAY_NAME = (function(){
+    try{ return decodeURIComponent(location.pathname.split('/').pop() || '') || 'this file'; }
+    catch(e){ return 'this file'; }
+  }());
+
+  /* ============================================================
+     STATE
+  ============================================================ */
+  var state = { body:"" };
+  var docTitle = "";
+  var dirty = false;
+  var lastSavedAt = null;
+  var DEFAULT_DOCUMENT_TITLE = document.title;
+
+  var els = {
+    titleInput: document.getElementById('titleInput'),
+    saveBtn: document.getElementById('saveBtn'),
+    saveStatus: document.getElementById('saveStatus'),
+    saveStatusText: document.getElementById('saveStatusText'),
+    filenamePill: document.getElementById('filenamePill'),
+    editorScreen: document.getElementById('editorScreen'),
+    importBtn: document.getElementById('importBtn'),
+    exportBtn: document.getElementById('exportBtn'),
+    source: document.getElementById('source'),
+    preview: document.getElementById('preview'),
+    dropHint: document.getElementById('dropHint'),
+    wordCount: document.getElementById('wordCount'),
+    toast: document.getElementById('toast'),
+    historyTab: document.getElementById('historyTab'),
+    detailsPane: document.getElementById('detailsPane'),
+    historyPane: document.getElementById('historyPane'),
+    historyRaw: document.getElementById('historyRaw'),
+    updatedStamp: document.getElementById('updatedStamp')
+  };
+
+  /* ============================================================
+     TOAST
+  ============================================================ */
+  var toastTimer = null;
+  function toast(msg){
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ els.toast.classList.remove('show'); }, 2600);
+  }
+
+  /* ============================================================
+     MARKDOWN PARSER (small GFM-flavored subset, self-contained)
+  ============================================================ */
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function parseInline(text){
+    // protect inline code first
+    var codeStore = [];
+    text = text.replace(/`([^`]+?)`/g, function(_, code){
+      var idx = codeStore.length;
+      codeStore.push(escapeHtml(code));
+      return " C" + idx + " ";
+    });
+
+    text = escapeHtml(text);
+
+    // literal <del>text</del> renders as real strikethrough, same as ~~text~~
+    text = text.replace(/&lt;del&gt;([\s\S]*?)&lt;\/del&gt;/gi, '<del>$1</del>');
+
+    // images ![alt](url)
+    text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, function(_, alt, url, title){
+      var t = title ? ' title="' + escapeHtml(title) + '"' : '';
+      return '<img src="' + url + '" alt="' + escapeHtml(alt) + '"' + t + '>';
+    });
+    // links [text](url)
+    text = text.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, function(_, label, url, title){
+      var t = title ? ' title="' + escapeHtml(title) + '"' : '';
+      var external = /^https?:\/\//i.test(url);
+      return '<a href="' + url + '"' + t + (external ? ' target="_blank" rel="noopener noreferrer"' : '') + '>' + label + '</a>';
+    });
+    // bare autolinks
+    text = text.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, function(_, pre, url){
+      return pre + '<a href="' + url + '" target="_blank" rel="noopener noreferrer">' + url + '</a>';
+    });
+    // bold
+    text = text.replace(/\*\*([^*]+?)\*\*|__([^_]+?)__/g, function(_, a, b){ return '<strong>' + (a||b) + '</strong>'; });
+    // italic
+    text = text.replace(/\*([^*]+?)\*|(?:^|[^\w])_([^_]+?)_/g, function(m, a, b){
+      if(a) return '<em>' + a + '</em>';
+      return m.charAt(0) + '<em>' + b + '</em>';
+    });
+    // strikethrough
+    text = text.replace(/~~([^~]+?)~~/g, '<del>$1</del>');
+    // line breaks: single newline -> <br> (comment-style live feel)
+    text = text.replace(/\n/g, '<br>');
+
+    // restore code spans
+    text = text.replace(/ C(\d+) /g, function(_, i){ return '<code>' + codeStore[+i] + '</code>'; });
+    return text;
+  }
+
+  function parseMarkdown(md){
+    if(!md || !md.trim()) return '';
+    var lines = md.replace(/\r\n?/g, '\n').split('\n');
+    var html = [];
+    var i = 0;
+    var listStack = null; // {type:'ul'|'ol', html:[]}
+
+    function closeList(){
+      if(listStack){
+        html.push('<' + listStack.type + '>' + listStack.items.join('') + '</' + listStack.type + '>');
+        listStack = null;
+      }
+    }
+
+    while(i < lines.length){
+      var line = lines[i];
+
+      // fenced code block
+      var fence = line.match(/^\s*```(.*)$/);
+      if(fence){
+        closeList();
+        var lang = fence[1].trim();
+        var buf = [];
+        i++;
+        while(i < lines.length && !/^\s*```/.test(lines[i])){ buf.push(lines[i]); i++; }
+        i++; // skip closing fence
+        html.push('<pre><code' + (lang ? ' class="lang-' + escapeHtml(lang) + '"' : '') + '>' + escapeHtml(buf.join('\n')) + '</code></pre>');
+        continue;
+      }
+
+      // blank line(s) - block elements below carry no margin of their own
+      // (see .md-preview CSS), so every blank line in the source becomes
+      // exactly one <br> of visible gap. 1 blank line = 1 line of space,
+      // 2 = 2, and so on, whatever block types sit on either side of it.
+      if(/^\s*$/.test(line)){
+        closeList();
+        var blankCount = 0;
+        while(i < lines.length && /^\s*$/.test(lines[i])){ blankCount++; i++; }
+        html.push('<br>'.repeat(blankCount));
+        continue;
+      }
+
+      // horizontal rule
+      if(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)){ closeList(); html.push('<hr>'); i++; continue; }
+
+      // headers
+      var h = line.match(/^(#{1,6})\s+(.*)$/);
+      if(h){
+        closeList();
+        var level = h[1].length;
+        html.push('<h' + level + '>' + parseInline(h[2].trim()) + '</h' + level + '>');
+        i++; continue;
+      }
+
+      // blockquote
+      if(/^\s*>\s?/.test(line)){
+        closeList();
+        var qbuf = [];
+        while(i < lines.length && /^\s*>\s?/.test(lines[i])){
+          qbuf.push(lines[i].replace(/^\s*>\s?/, ''));
+          i++;
+        }
+        html.push('<blockquote>' + parseMarkdown(qbuf.join('\n')) + '</blockquote>');
+        continue;
+      }
+
+      // table (header row + separator row)
+      if(/^\s*\|.*\|\s*$/.test(line) && lines[i+1] && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(lines[i+1])){
+        closeList();
+        var headCells = line.trim().replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim();});
+        i += 2;
+        var rows = [];
+        while(i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])){
+          rows.push(lines[i].trim().replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim();}));
+          i++;
+        }
+        var t = '<table><thead><tr>' + headCells.map(function(c){return '<th>'+parseInline(c)+'</th>';}).join('') + '</tr></thead><tbody>';
+        rows.forEach(function(r){ t += '<tr>' + r.map(function(c){return '<td>'+parseInline(c)+'</td>';}).join('') + '</tr>'; });
+        t += '</tbody></table>';
+        html.push(t);
+        continue;
+      }
+
+      // task list item
+      var task = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.*)$/);
+      if(task){
+        if(!listStack || listStack.type !== 'ul'){ closeList(); listStack = {type:'ul', items:[]}; }
+        var checked = /x/i.test(task[1]);
+        listStack.items.push('<li class="task-item"><input type="checkbox" disabled' + (checked?' checked':'') + '> ' + parseInline(task[2]) + '</li>');
+        i++; continue;
+      }
+
+      // unordered list item
+      var ul = line.match(/^\s*[-*+]\s+(.*)$/);
+      if(ul){
+        if(!listStack || listStack.type !== 'ul'){ closeList(); listStack = {type:'ul', items:[]}; }
+        listStack.items.push('<li>' + parseInline(ul[1]) + '</li>');
+        i++; continue;
+      }
+
+      // ordered list item
+      var ol = line.match(/^\s*\d+\.\s+(.*)$/);
+      if(ol){
+        if(!listStack || listStack.type !== 'ol'){ closeList(); listStack = {type:'ol', items:[]}; }
+        listStack.items.push('<li>' + parseInline(ol[1]) + '</li>');
+        i++; continue;
+      }
+
+      // paragraph (collect consecutive plain lines)
+      closeList();
+      var pbuf = [line];
+      i++;
+      while(i < lines.length && !/^\s*$/.test(lines[i]) &&
+            !/^(#{1,6})\s+/.test(lines[i]) && !/^\s*```/.test(lines[i]) &&
+            !/^\s*[-*+]\s+/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i]) &&
+            !/^\s*>\s?/.test(lines[i]) && !/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i])){
+        pbuf.push(lines[i]); i++;
+      }
+      html.push('<p>' + parseInline(pbuf.join('\n')) + '</p>');
+    }
+    closeList();
+    return html.join('\n');
+  }
+
+  function renderPreview(){
+    var htmlOut = parseMarkdown(expandImages(els.source.value));
+    els.preview.innerHTML = htmlOut;
+    els.preview.classList.toggle('empty', !htmlOut);
+  }
+
+  function stripBom(text){
+    return text.replace(/^﻿/, '');
+  }
+
+  /* ============================================================
+     STATE <-> UI SYNC
+  ============================================================ */
+  function pushStateToUI(){
+    els.source.value = collapseImages(state.body);
+    renderPreview();
+    updateWordCount();
+  }
+
+  function updateWordCount(){
+    var words = (els.source.value.match(/\S+/g) || []).length;
+    els.wordCount.textContent = words + ' word' + (words === 1 ? '' : 's');
+  }
+
+  /* ============================================================
+     DIRTY / SAVE
+  ============================================================ */
+  function markDirty(){
+    dirty = true;
+    els.saveStatus.classList.add('is-dirty');
+    els.saveStatusText.textContent = 'Unsaved changes';
+    els.saveBtn.disabled = false;
+  }
+  function markClean(){
+    dirty = false;
+    els.saveStatus.classList.remove('is-dirty');
+    els.saveStatusText.textContent = formatRelative(lastSavedAt);
+  }
+  function formatRelative(date){
+    if(!date) return 'Not saved yet';
+    var s = Math.floor((Date.now() - date.getTime())/1000);
+    if(s < 5) return 'Saved just now';
+    if(s < 60) return 'Saved ' + s + 's ago';
+    var m = Math.floor(s/60);
+    if(m < 60) return 'Saved ' + m + 'm ago';
+    var h = Math.floor(m/60);
+    return 'Saved ' + h + 'h ago';
+  }
+  setInterval(function(){ if(!dirty && lastSavedAt) els.saveStatusText.textContent = formatRelative(lastSavedAt); }, 15000);
+
+  function applyDocumentTitle(){
+    document.title = docTitle ? docTitle + ' — ' + DEFAULT_DOCUMENT_TITLE : DEFAULT_DOCUMENT_TITLE;
+  }
+
+  function composeDocument(){
+    var body = expandImages(els.source.value);
+    return docTitle ? '# ' + docTitle + '\n\n' + body : body;
+  }
+
+  function slugify(title){
+    var slug = title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return slug || 'task';
+  }
+
+  function saveToStorage(){
+    state.body = expandImages(els.source.value);
+    els.historyRaw.textContent = composeDocument();
+    try{
+      localStorage.setItem(LS_BODY, state.body);
+      localStorage.setItem(LS_TITLE, docTitle);
+      lastSavedAt = new Date();
+      localStorage.setItem(LS_UPDATED, lastSavedAt.toISOString());
+      markClean();
+      els.updatedStamp.textContent = lastSavedAt.toLocaleString();
+      toast('Saved');
+    }catch(err){
+      toast('Could not save — browser storage may be full or blocked');
+    }
+  }
+
+  function exportFile(){
+    state.body = els.source.value;
+    var blob = new Blob([composeDocument()], {type:'text/markdown'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    var filename = slugify(docTitle) + '.md';
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+    toast('Downloaded ' + filename);
+  }
+
+  function importFile(){
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = '.md,text/markdown,text/plain';
+    input.addEventListener('change', function(){
+      var file = input.files[0];
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(){
+        var text = stripBom(reader.result);
+        var heading = text.match(/^#\s+(.+?)\s*\r?\n\r?\n?/);
+        if(heading){
+          docTitle = heading[1].trim();
+          text = text.slice(heading[0].length);
+        } else {
+          docTitle = '';
+        }
+        els.titleInput.value = docTitle;
+        applyDocumentTitle();
+        state = { body: text };
+        pushStateToUI();
+        markDirty();
+        toast('Imported ' + file.name);
+      };
+      reader.readAsText(file);
+    });
+    input.click();
+  }
+
+  els.titleInput.addEventListener('input', function(){
+    docTitle = els.titleInput.value;
+    applyDocumentTitle();
+    markDirty();
+  });
+  els.saveBtn.addEventListener('click', function(){ saveToStorage(); });
+  els.exportBtn.addEventListener('click', exportFile);
+  els.importBtn.addEventListener('click', importFile);
+  window.addEventListener('keydown', function(e){
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){
+      e.preventDefault();
+      saveToStorage();
+    }
+  });
+  window.addEventListener('beforeunload', function(e){
+    if(dirty){ e.preventDefault(); e.returnValue = ''; }
+  });
+
+  /* ============================================================
+     FIELD LISTENERS
+  ============================================================ */
+  els.source.addEventListener('input', function(){
+    renderPreview();
+    updateWordCount();
+    markDirty();
+  });
+  els.preview.addEventListener('click', function(e){
+    if(e.target && e.target.type === 'checkbox'){
+      // interactive task-list toggling, mirrors ADO/GitHub comment checkboxes
+      var items = els.preview.querySelectorAll('input[type=checkbox]');
+      var idx = Array.prototype.indexOf.call(items, e.target);
+      toggleNthCheckbox(idx, e.target.checked);
+    }
+  });
+  function toggleNthCheckbox(idx, checked){
+    var text = els.source.value;
+    var lines = text.split('\n');
+    var count = -1;
+    var offset = 0;
+    for(var i=0;i<lines.length;i++){
+      var line = lines[i];
+      if(/^\s*[-*]\s+\[([ xX])\]\s+/.test(line)){
+        count++;
+        if(count === idx){
+          var bracketPos = offset + line.indexOf('[');
+          replaceRange(bracketPos, bracketPos + 3, checked ? '[x]' : '[ ]', bracketPos, bracketPos + 3);
+          renderPreview();
+          markDirty();
+          return;
+        }
+      }
+      offset += line.length + 1; // +1 for the '\n' removed by split
+    }
+  }
+
+  /* ============================================================
+     TOOLBAR COMMANDS
+  ============================================================ */
+  /* Replace [start,end) with text via execCommand so the browser's native
+     undo/redo stack (Ctrl+Z) sees it as a normal edit, not a wholesale
+     value swap. Falls back to a direct value assignment if execCommand
+     is unavailable (undo won't cover that edit, but the edit still works). */
+  function replaceRange(start, end, text, selStart, selEnd){
+    var ta = els.source;
+    ta.focus();
+    ta.selectionStart = start;
+    ta.selectionEnd = end;
+    var inserted = false;
+    try{ inserted = document.execCommand('insertText', false, text); }catch(e){ inserted = false; }
+    if(!inserted){
+      var val = ta.value;
+      ta.value = val.slice(0, start) + text + val.slice(end);
+    }
+    var finalStart = selStart === undefined ? start + text.length : selStart;
+    var finalEnd = selEnd === undefined ? finalStart : selEnd;
+    ta.selectionStart = finalStart;
+    ta.selectionEnd = finalEnd;
+  }
+  function wrapSelection(before, after){
+    after = after === undefined ? before : after;
+    var ta = els.source;
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    var selected = ta.value.slice(s, e);
+    replaceRange(s, e, before + selected + after, s + before.length, s + before.length + selected.length);
+    renderPreview(); updateWordCount(); markDirty();
+  }
+  function insertAtLineStart(prefix){
+    var ta = els.source;
+    var s = ta.selectionStart;
+    var val = ta.value;
+    var lineStart = val.lastIndexOf('\n', s - 1) + 1;
+    replaceRange(lineStart, lineStart, prefix, s + prefix.length);
+    renderPreview(); updateWordCount(); markDirty();
+  }
+  function insertBlock(text){
+    var ta = els.source;
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    var val = ta.value;
+    var needsLeadingNl = s > 0 && val[s-1] !== '\n';
+    var insert = (needsLeadingNl ? '\n' : '') + text;
+    replaceRange(s, e, insert, s + insert.length);
+    renderPreview(); updateWordCount(); markDirty();
+  }
+  /* Indent (dir>0) or outdent (dir<0) every line touched by the current
+     selection, replacing just that block so undo sees one coherent edit
+     instead of the whole textarea being swapped out. */
+  function indentBlock(dir){
+    var ta = els.source;
+    var s = ta.selectionStart, en = ta.selectionEnd;
+    var val = ta.value;
+    var lineStart = val.lastIndexOf('\n', s - 1) + 1;
+    var searchFrom = en;
+    if(en > lineStart && val[en - 1] === '\n') searchFrom = en - 1; // don't drag in an untouched trailing line
+    var nextNl = val.indexOf('\n', searchFrom);
+    var blockEnd = nextNl === -1 ? val.length : nextNl;
+    var lines = val.slice(lineStart, blockEnd).split('\n');
+    var deltas = lines.map(function(line){
+      if(dir > 0) return 2;
+      if(line.slice(0, 2) === '  ') return -2;
+      if(line.charAt(0) === '\t') return -1;
+      return 0;
+    });
+    var out = lines.map(function(line, i){
+      return dir > 0 ? '  ' + line : line.slice(-deltas[i]);
+    });
+    var totalDelta = deltas.reduce(function(a, b){ return a + b; }, 0);
+    var newSelStart = Math.max(lineStart, s + deltas[0]);
+    var newSelEnd = Math.max(newSelStart, en + totalDelta);
+    replaceRange(lineStart, blockEnd, out.join('\n'), newSelStart, newSelEnd);
+  }
+  function dedentCurrentLine(){
+    var ta = els.source;
+    var s = ta.selectionStart;
+    var val = ta.value;
+    var lineStart = val.lastIndexOf('\n', s - 1) + 1;
+    var removed = val.slice(lineStart, lineStart + 2) === '  ' ? 2 : (val.charAt(lineStart) === '\t' ? 1 : 0);
+    if(removed){
+      replaceRange(lineStart, lineStart + removed, '', Math.max(lineStart, s - removed));
+    }
+  }
+
+  var TOOLBAR_CMDS = {
+    bold: function(){ wrapSelection('**'); },
+    italic: function(){ wrapSelection('*'); },
+    strike: function(){ wrapSelection('~~'); },
+    h1: function(){ insertAtLineStart('# '); },
+    h2: function(){ insertAtLineStart('## '); },
+    quote: function(){ insertAtLineStart('> '); },
+    code: function(){ wrapSelection('`'); },
+    link: function(){ wrapSelection('[', '](https://)'); },
+    image: function(){ insertBlock('![alt text](https://)\n'); },
+    ul: function(){ insertAtLineStart('- '); },
+    ol: function(){ insertAtLineStart('1. '); },
+    task: function(){ insertAtLineStart('- [ ] '); },
+    table: function(){ insertBlock('| Column 1 | Column 2 |\n| --- | --- |\n| value | value |\n'); },
+    hr: function(){ insertBlock('\n---\n'); }
+  };
+  document.querySelectorAll('.md-tool-btn[data-cmd]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var fn = TOOLBAR_CMDS[btn.dataset.cmd];
+      if(fn) fn();
+    });
+  });
+  els.source.addEventListener('keydown', function(e){
+    if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='b'){ e.preventDefault(); TOOLBAR_CMDS.bold(); }
+    else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='i'){ e.preventDefault(); TOOLBAR_CMDS.italic(); }
+    else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); TOOLBAR_CMDS.link(); }
+    else if(e.key === 'Tab'){
+      e.preventDefault();
+      var ta = els.source;
+      var hasSelection = ta.selectionStart !== ta.selectionEnd;
+      if(e.shiftKey){
+        if(hasSelection) indentBlock(-1); else dedentCurrentLine();
+      } else if(hasSelection){
+        indentBlock(1);
+      } else {
+        replaceRange(ta.selectionStart, ta.selectionEnd, '  ');
+      }
+      renderPreview(); markDirty();
+    } else if(e.key === 'Escape'){
+      els.source.blur();
+    }
+  });
+
+  /* Details / History tabs */
+  document.querySelector('.tab.active').addEventListener('click', function(){ switchTab('details'); });
+  els.historyTab.addEventListener('click', function(){ switchTab('history'); });
+  function switchTab(name){
+    document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+    if(name === 'details'){
+      document.querySelector('.tabs .tab:first-child').classList.add('active');
+      els.detailsPane.hidden = false; els.historyPane.hidden = true;
+    } else {
+      els.historyTab.classList.add('active');
+      els.historyRaw.textContent = composeDocument();
+      els.detailsPane.hidden = true; els.historyPane.hidden = false;
+    }
+  }
+
+  /* ============================================================
+     IMAGE PASTE / DROP -> base64 data URI, embedded straight
+     into the single markdown file (no attachments folder).
+
+     The saved/exported/rendered document always carries the real
+     data: URI — that's unchanged. But a multi-KB/MB base64 blob
+     sitting inline makes the textarea unreadable, so on-screen it's
+     swapped for a short "devopslight-embed://imgN" placeholder.
+     imageStore holds the real data behind each placeholder for the
+     life of the page; expandImages() swaps placeholders back to real
+     data whenever the true document is needed (render, save, export).
+  ============================================================ */
+  var imageStore = Object.create(null);
+  var imageCounter = 0;
+  function storeImage(dataUrl){
+    imageCounter++;
+    var id = 'img' + imageCounter;
+    imageStore[id] = dataUrl;
+    return 'devopslight-embed://' + id;
+  }
+  function collapseImages(text){
+    return text.replace(/!\[([^\]]*)\]\((data:[^)]+)\)/g, function(_, alt, dataUrl){
+      return '![' + alt + '](' + storeImage(dataUrl) + ')';
+    });
+  }
+  function expandImages(text){
+    return text.replace(/devopslight-embed:\/\/([a-zA-Z0-9_]+)/g, function(whole, id){
+      return Object.prototype.hasOwnProperty.call(imageStore, id) ? imageStore[id] : whole;
+    });
+  }
+
+  var MAX_DIM = 1500;
+  function fileToDataUrl(file){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      var reader = new FileReader();
+      reader.onload = function(){
+        img.onload = function(){
+          var w = img.width, h = img.height;
+          var scale = Math.min(1, MAX_DIM / Math.max(w, h));
+          var cw = Math.round(w * scale), ch = Math.round(h * scale);
+          var canvas = document.createElement('canvas');
+          canvas.width = cw; canvas.height = ch;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, cw, ch);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+  function insertImageMarkdown(dataUrl, altBase){
+    var ta = els.source;
+    var s = ta.selectionStart, e = ta.selectionEnd;
+    var md = '![' + altBase + '](' + storeImage(dataUrl) + ')';
+    var val = ta.value;
+    var needsNl = s > 0 && val[s-1] !== '\n';
+    var insert = (needsNl ? '\n' : '') + md + '\n';
+    replaceRange(s, e, insert, s + insert.length);
+    renderPreview(); updateWordCount(); markDirty();
+  }
+  var pasteCounter = 0;
+  async function handleImageFiles(files){
+    for(var i=0;i<files.length;i++){
+      var file = files[i];
+      if(!/^image\//.test(file.type)) continue;
+      pasteCounter++;
+      var alt = 'image-' + Date.now() + '-' + pasteCounter;
+      toast('Embedding image…');
+      try{
+        var dataUrl = await fileToDataUrl(file);
+        insertImageMarkdown(dataUrl, alt);
+        toast('Image embedded');
+      }catch(err){
+        toast('Could not read image');
+      }
+    }
+  }
+  els.source.addEventListener('paste', function(e){
+    var items = (e.clipboardData && e.clipboardData.items) || [];
+    var files = [];
+    for(var i=0;i<items.length;i++){
+      if(items[i].kind === 'file' && /^image\//.test(items[i].type)){
+        files.push(items[i].getAsFile());
+      }
+    }
+    if(files.length){
+      e.preventDefault();
+      handleImageFiles(files);
+    }
+  });
+  ['dragenter','dragover'].forEach(function(evt){
+    els.source.addEventListener(evt, function(e){
+      e.preventDefault();
+      if(Array.prototype.some.call(e.dataTransfer.items || [], function(it){ return it.kind === 'file'; })){
+        els.dropHint.classList.add('show');
+      }
+    });
+  });
+  ['dragleave','drop'].forEach(function(evt){
+    els.source.addEventListener(evt, function(){ els.dropHint.classList.remove('show'); });
+  });
+  els.source.addEventListener('drop', function(e){
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if(files && files.length){
+      e.preventDefault();
+      handleImageFiles(files);
+    }
+  });
+
+  /* ============================================================
+     PERSISTENCE (localStorage — no permission prompts, ever.
+     Export/Import above are the escape hatch to a real .md file.)
+  ============================================================ */
+  var LS_BODY = 'devopslight:' + STORAGE_NS + ':body';
+  var LS_TITLE = 'devopslight:' + STORAGE_NS + ':title';
+  var LS_UPDATED = 'devopslight:' + STORAGE_NS + ':updated';
+
+  function loadFromStorage(){
+    els.filenamePill.textContent = DISPLAY_NAME + ' · saved in this browser';
+    var text = '';
+    try{ text = localStorage.getItem(LS_BODY) || ''; }catch(e){ /* storage blocked */ }
+    var title = '';
+    try{ title = localStorage.getItem(LS_TITLE) || ''; }catch(e){ /* storage blocked */ }
+    var updated = null;
+    try{
+      var raw = localStorage.getItem(LS_UPDATED);
+      if(raw) updated = new Date(raw);
+    }catch(e){ /* storage blocked */ }
+    state = { body: text };
+    docTitle = title;
+    els.titleInput.value = docTitle;
+    applyDocumentTitle();
+    lastSavedAt = updated;
+    pushStateToUI();
+    els.updatedStamp.textContent = updated ? updated.toLocaleString() : '—';
+    markClean();
+  }
+
+  /* ============================================================
+     INIT
+  ============================================================ */
+  loadFromStorage();
+
+})();
+</script>
+</body>
+</html>
