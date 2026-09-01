@@ -6,13 +6,9 @@
  / /_/ /  __/ |/ / /_/ / /_/ (__  ) /___/ / /_/ / / / / /_
 /_____/\___/|___/\____/ .___/____/_____/_/\__, /_/ /_/\__/
                      /_/                 /____/
-                                                                          cory@coryglenn.ai 09/01/2026
-```
-                                                
+```                                              
 A markdown editor. One HTML file. Zero dependencies. Never phones home.
-
 Open it. Type. Ctrl+S. That's the whole product.
-
 ---
 
 This is just one .html file. Save it anywhere. Double-click it. It works.
