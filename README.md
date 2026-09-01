@@ -11,6 +11,8 @@ A markdown editor. One HTML file. Zero dependencies. Never phones home.
 Open it. Type. Ctrl+S. That's the whole product.
 ---
 
+![DevOpsLight screenshot](screenshot.png)
+
 This is just one .html file. Save it anywhere. Double-click it. It works.
 
 It's built like the description field on an Azure DevOps work item.
