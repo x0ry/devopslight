@@ -142,9 +142,12 @@
   .md-preview li{margin:.25em 0;}
   .md-preview li.task-item{list-style:none;margin-left:-1.4em;}
   .md-preview li.task-item input{margin-right:6px;}
-  .md-preview .attachment-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 8px;margin:2px 0;border:1px solid var(--border-strong);border-radius:14px;background:#f3f2f1;color:var(--text);text-decoration:none;font-size:.92em;line-height:1.4;vertical-align:middle;}
-  .md-preview .attachment-chip:hover{background:#e1dfdd;border-color:var(--ado-blue);text-decoration:none;}
-  .md-preview .attachment-chip .clip{opacity:.75;}
+  .md-preview .attachment-chip{display:inline-flex;align-items:stretch;margin:2px 0;border:1px solid var(--border-strong);border-radius:14px;background:#f3f2f1;vertical-align:middle;font-size:.92em;line-height:1.4;overflow:hidden;}
+  .md-preview .attachment-download{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;color:var(--text);text-decoration:none;}
+  .md-preview .attachment-download:hover{background:#e1dfdd;text-decoration:none;}
+  .md-preview .attachment-download .clip-icon{opacity:.7;flex:none;}
+  .md-preview .attachment-hash{border:none;border-left:1px solid var(--border-strong);background:transparent;color:var(--text-secondary);font-family:Consolas,"Cascadia Mono",Menlo,monospace;font-size:.92em;padding:4px 8px;cursor:pointer;}
+  .md-preview .attachment-hash:hover{background:#e1dfdd;color:var(--ado-blue-dark);}
   .md-preview hr{border:none;border-top:1px solid var(--border-strong);margin:0;}
   .md-preview table{border-collapse:collapse;margin:0;font-size:.95em;}
   .md-preview th,.md-preview td{border:1px solid var(--border-strong);padding:5px 10px;}
@@ -325,6 +328,8 @@
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  var ATTACHMENT_ICON_SVG = '<svg class="clip-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>';
+
   function parseInline(text){
     // protect inline code first
     var codeStore = [];
@@ -344,9 +349,11 @@
       var t = title ? ' title="' + escapeHtml(title) + '"' : '';
       return '<img src="' + url + '" alt="' + escapeHtml(alt) + '"' + t + '>';
     });
-    // attachments [📎 filename](url) — rendered as a downloadable chip, ADO-style
-    text = text.replace(/\[📎\s*([^\]]+)\]\(([^)\s]+)\)/g, function(_, filename, url){
-      return '<a class="attachment-chip" href="' + url + '" download="' + filename + '" target="_blank" rel="noopener noreferrer"><span class="clip">📎</span>' + filename + '</a>';
+    // attachments [📎 filename](url "sha256:hash") — rendered as a downloadable
+    // chip, ADO-style: icon+filename downloads, the hash segment copies to clipboard.
+    text = text.replace(/\[📎\s*([^\]]+)\]\(([^)\s]+)(?:\s+&quot;sha256:([0-9a-f]{64})&quot;)?\)/g, function(_, filename, url, hash){
+      var hashPart = hash ? '<button type="button" class="attachment-hash" data-hash="' + hash + '" title="Click to copy SHA-256 checksum">' + hash.slice(0, 8) + '</button>' : '';
+      return '<span class="attachment-chip"><a class="attachment-download" href="' + url + '" download="' + filename + '" target="_blank" rel="noopener noreferrer" title="Download ' + filename + '">' + ATTACHMENT_ICON_SVG + filename + '</a>' + hashPart + '</span>';
     });
     // links [text](url)
     text = text.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g, function(_, label, url, title){
@@ -730,8 +737,34 @@
       var items = els.preview.querySelectorAll('input[type=checkbox]');
       var idx = Array.prototype.indexOf.call(items, e.target);
       toggleNthCheckbox(idx, e.target.checked);
+      return;
+    }
+    var hashBtn = e.target.closest && e.target.closest('.attachment-hash');
+    if(hashBtn){
+      copyToClipboard(hashBtn.dataset.hash);
     }
   });
+  function copyToClipboard(text){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        toast('Checksum copied');
+      }).catch(function(){ copyViaExecCommand(text); });
+    } else {
+      copyViaExecCommand(text);
+    }
+  }
+  function copyViaExecCommand(text){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try{ ok = document.execCommand('copy'); }catch(e){ ok = false; }
+    ta.remove();
+    toast(ok ? 'Checksum copied' : 'Could not copy checksum');
+  }
   function toggleNthCheckbox(idx, checked){
     var text = els.source.value;
     var lines = text.split('\n');
@@ -931,8 +964,8 @@
     text = text.replace(/!\[([^\]]*)\]\((data:[^)]+)\)/g, function(_, alt, dataUrl){
       return '![' + alt + '](' + storeEmbed(dataUrl) + ')';
     });
-    text = text.replace(/\[(📎[^\]]*)\]\((data:[^)]+)\)/g, function(_, label, dataUrl){
-      return '[' + label + '](' + storeEmbed(dataUrl) + ')';
+    text = text.replace(/\[(📎[^\]]*)\]\((data:[^)\s]+)(\s+"[^"]*")?\)/g, function(_, label, dataUrl, titlePart){
+      return '[' + label + '](' + storeEmbed(dataUrl) + (titlePart || '') + ')';
     });
     return text;
   }
@@ -973,6 +1006,13 @@
       reader.readAsDataURL(file);
     });
   }
+  async function sha256Hex(file){
+    var buf = await file.arrayBuffer();
+    var digest = await crypto.subtle.digest('SHA-256', buf);
+    return Array.prototype.map.call(new Uint8Array(digest), function(b){
+      return b.toString(16).padStart(2, '0');
+    }).join('');
+  }
   function insertImageMarkdown(dataUrl, altBase){
     var ta = els.source;
     var s = ta.selectionStart, e = ta.selectionEnd;
@@ -983,11 +1023,12 @@
     replaceRange(s, e, insert, s + insert.length);
     renderPreview(); updateWordCount(); markDirty();
   }
-  function insertAttachmentMarkdown(dataUrl, filename){
+  function insertAttachmentMarkdown(dataUrl, filename, hashHex){
     var ta = els.source;
     var s = ta.selectionStart, e = ta.selectionEnd;
     var safeName = filename.replace(/[\[\]\r\n]/g, ' ').trim() || 'file';
-    var md = '[📎 ' + safeName + '](' + storeEmbed(dataUrl) + ')';
+    var titlePart = hashHex ? ' "sha256:' + hashHex + '"' : '';
+    var md = '[📎 ' + safeName + '](' + storeEmbed(dataUrl) + titlePart + ')';
     var val = ta.value;
     var needsNl = s > 0 && val[s-1] !== '\n';
     var insert = (needsNl ? '\n' : '') + md + '\n';
@@ -1013,7 +1054,8 @@
         toast('Attaching ' + file.name + '…');
         try{
           var rawUrl = await fileToRawDataUrl(file);
-          insertAttachmentMarkdown(rawUrl, file.name);
+          var hashHex = await sha256Hex(file);
+          insertAttachmentMarkdown(rawUrl, file.name, hashHex);
           toast('Attachment embedded');
         }catch(err){
           toast('Could not read file');
