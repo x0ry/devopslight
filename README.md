@@ -42,6 +42,10 @@ A wiki wants a server. A note app wants a subscription. A tracker wants your who
 
 A file that's actually yours.. No framework, no build step, I think theres a reason they call it a SPA.
 
+# Future features
+- Encryption
+- Live Multiplayer
+
 ## License
 
-MIT. Take it, fork it, ship it as your own. It's one file — nothing here to gatekeep.
+MIT. Take it, fork it, ship it as your own. I hope you find it as useful in your day to day as I do.
