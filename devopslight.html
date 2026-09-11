@@ -347,10 +347,11 @@
       var t = title ? ' title="' + escapeHtml(title) + '"' : '';
       return '<img src="' + url + '" alt="' + escapeHtml(alt) + '"' + t + '>';
     });
-    // attachments [📎 filename](url "sha256:hash") — rendered as a downloadable
-    // chip, ADO-style: filename side downloads, the hash segment copies to clipboard.
-    text = text.replace(/\[📎\s*([^\]]+)\]\(([^)\s]+)(?:\s+&quot;sha256:([0-9a-f]{64})&quot;)?\)/g, function(_, filename, url, hash){
-      var hashPart = hash ? '<button type="button" class="attachment-hash" data-hash="' + hash + '" title="Click to copy SHA-256 checksum">' + hash.slice(0, 8) + '</button>' : '';
+    // attachments [filename](url "sha256:hash") — an ordinary-looking markdown
+    // link; the sha256 title is what marks it as an attachment, rendered as a
+    // downloadable chip, ADO-style: filename side downloads, hash segment copies.
+    text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\s+&quot;sha256:([0-9a-f]{64})&quot;\)/g, function(_, filename, url, hash){
+      var hashPart = '<button type="button" class="attachment-hash" data-hash="' + hash + '" title="Click to copy SHA-256 checksum">' + hash.slice(0, 8) + '</button>';
       return '<span class="attachment-chip"><a class="attachment-download" href="' + url + '" download="' + filename + '" target="_blank" rel="noopener noreferrer" title="Download ' + filename + '">' + filename + '</a>' + hashPart + '</span>';
     });
     // links [text](url)
@@ -943,8 +944,9 @@
      embedStore holds the real data behind each placeholder for the
      life of the page; expandEmbeds() swaps placeholders back to real
      data whenever the true document is needed (render, save, export).
-     Images use ![alt](url), attachments use [📎 filename](url) —
-     both get collapsed/expanded the same way.
+     Images use ![alt](url), attachments use a plain-looking
+     [filename](url "sha256:hash") link — both get collapsed/expanded
+     the same way.
   ============================================================ */
   var embedStore = Object.create(null);
   var embedCounter = 0;
@@ -958,8 +960,8 @@
     text = text.replace(/!\[([^\]]*)\]\((data:[^)]+)\)/g, function(_, alt, dataUrl){
       return '![' + alt + '](' + storeEmbed(dataUrl) + ')';
     });
-    text = text.replace(/\[(📎[^\]]*)\]\((data:[^)\s]+)(\s+"[^"]*")?\)/g, function(_, label, dataUrl, titlePart){
-      return '[' + label + '](' + storeEmbed(dataUrl) + (titlePart || '') + ')';
+    text = text.replace(/\[([^\]]+)\]\((data:[^)\s]+)(\s+"sha256:[0-9a-f]{64}")\)/g, function(_, label, dataUrl, titlePart){
+      return '[' + label + '](' + storeEmbed(dataUrl) + titlePart + ')';
     });
     return text;
   }
@@ -1022,7 +1024,7 @@
     var s = ta.selectionStart, e = ta.selectionEnd;
     var safeName = filename.replace(/[\[\]\r\n]/g, ' ').trim() || 'file';
     var titlePart = hashHex ? ' "sha256:' + hashHex + '"' : '';
-    var md = '[📎 ' + safeName + '](' + storeEmbed(dataUrl) + titlePart + ')';
+    var md = '[' + safeName + '](' + storeEmbed(dataUrl) + titlePart + ')';
     var val = ta.value;
     var needsNl = s > 0 && val[s-1] !== '\n';
     var insert = (needsNl ? '\n' : '') + md + '\n';
