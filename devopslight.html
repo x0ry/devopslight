@@ -223,6 +223,7 @@
           <span class="filename-pill" id="filenamePill"></span>
           <button class="btn" id="importBtn" title="Load a .md file's text in">Import .md</button>
           <button class="btn" id="exportBtn" title="Download the current text as task.md">Export .md</button>
+          <button class="btn" id="exportAllBtn" title="Every saved story in this browser, written to individual .md files in a folder you pick">Export All&hellip;</button>
           <div class="save-status" id="saveStatus"><span class="dirty-dot"></span><span id="saveStatusText">Not saved yet</span></div>
         </div>
 
@@ -288,6 +289,7 @@
     editorScreen: document.getElementById('editorScreen'),
     importBtn: document.getElementById('importBtn'),
     exportBtn: document.getElementById('exportBtn'),
+    exportAllBtn: document.getElementById('exportAllBtn'),
     source: document.getElementById('source'),
     preview: document.getElementById('preview'),
     dropHint: document.getElementById('dropHint'),
@@ -582,6 +584,82 @@
     toast('Downloaded ' + filename);
   }
 
+  /* Every copy of this HTML file on disk shares the same browser storage
+     (file:// pages are all one origin), so this one page can already see
+     every other story's saved localStorage entries. "Export All" walks
+     that shared storage instead of the filesystem — there's no external
+     script that could do this, since the markdown never lived in a file
+     to begin with, only in the browser's own storage. */
+  function collectAllStories(){
+    var prefix = 'devopslight:';
+    var bodySuffix = ':body';
+    var stories = [];
+    for(var i = 0; i < localStorage.length; i++){
+      var key = localStorage.key(i);
+      if(!key || key.indexOf(prefix) !== 0 || key.slice(-bodySuffix.length) !== bodySuffix) continue;
+      var ns = key.slice(prefix.length, key.length - bodySuffix.length);
+      var body = localStorage.getItem(key) || '';
+      var title = localStorage.getItem(prefix + ns + ':title') || '';
+      if(!body.trim() && !title.trim()) continue; // skip stories nobody ever wrote in
+      var path = ns;
+      try{ path = decodeURIComponent(ns); }catch(e){ /* leave as-is */ }
+      stories.push({
+        path: path,
+        title: title,
+        content: title ? '# ' + title + '\n\n' + body : body
+      });
+    }
+    return stories;
+  }
+
+  function storyFilename(story, usedNames){
+    var base;
+    if(story.title.trim()){
+      base = slugify(story.title);
+    } else {
+      var parts = story.path.split(/[\\/]/).filter(Boolean);
+      var folder = parts.length >= 2 ? parts[parts.length - 2] : (parts[parts.length - 1] || 'story');
+      base = slugify(folder);
+    }
+    var name = base + '.md';
+    var n = 2;
+    while(usedNames[name]){
+      name = base + '-' + n + '.md';
+      n++;
+    }
+    usedNames[name] = true;
+    return name;
+  }
+
+  async function exportAllStories(){
+    if(!window.showDirectoryPicker){
+      toast('This browser can\'t pick a folder — try Chrome or Edge for Export All.');
+      return;
+    }
+    var stories = collectAllStories();
+    if(!stories.length){
+      toast('No saved stories found in this browser.');
+      return;
+    }
+    var dirHandle;
+    try{
+      dirHandle = await window.showDirectoryPicker();
+    }catch(e){ return; } // user cancelled the picker
+    var usedNames = Object.create(null);
+    var written = 0;
+    for(var i = 0; i < stories.length; i++){
+      var name = storyFilename(stories[i], usedNames);
+      try{
+        var fileHandle = await dirHandle.getFileHandle(name, {create:true});
+        var writable = await fileHandle.createWritable();
+        await writable.write(stories[i].content);
+        await writable.close();
+        written++;
+      }catch(e){ /* skip this one, keep going */ }
+    }
+    toast('Exported ' + written + ' of ' + stories.length + ' stories');
+  }
+
   function importFile(){
     var input = document.createElement('input');
     input.type = 'file'; input.accept = '.md,text/markdown,text/plain';
@@ -617,6 +695,7 @@
   });
   els.saveBtn.addEventListener('click', function(){ saveToStorage(); });
   els.exportBtn.addEventListener('click', exportFile);
+  els.exportAllBtn.addEventListener('click', exportAllStories);
   els.importBtn.addEventListener('click', importFile);
   window.addEventListener('keydown', function(e){
     if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'){
