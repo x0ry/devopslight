@@ -456,7 +456,7 @@
       if(task){
         if(!listStack || listStack.type !== 'ul'){ closeList(); listStack = {type:'ul', items:[]}; }
         var checked = /x/i.test(task[1]);
-        listStack.items.push('<li class="task-item"><input type="checkbox" disabled' + (checked?' checked':'') + '> ' + parseInline(task[2]) + '</li>');
+        listStack.items.push('<li class="task-item"><input type="checkbox"' + (checked?' checked':'') + '> ' + parseInline(task[2]) + '</li>');
         i++; continue;
       }
 
