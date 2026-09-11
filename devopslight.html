@@ -568,14 +568,13 @@
     return slug || 'task';
   }
 
-  function saveToStorage(){
+  async function saveToStorage(){
     state.body = expandEmbeds(els.source.value);
     els.historyRaw.textContent = composeDocument();
+    var savedAt = new Date();
     try{
-      localStorage.setItem(LS_BODY, state.body);
-      localStorage.setItem(LS_TITLE, docTitle);
-      lastSavedAt = new Date();
-      localStorage.setItem(LS_UPDATED, lastSavedAt.toISOString());
+      await idbPut({ ns: STORAGE_NS, body: state.body, title: docTitle, updated: savedAt.toISOString() });
+      lastSavedAt = savedAt;
       markClean();
       els.updatedStamp.textContent = lastSavedAt.toLocaleString();
       toast('Saved');
@@ -600,29 +599,26 @@
 
   /* Every copy of this HTML file on disk shares the same browser storage
      (file:// pages are all one origin), so this one page can already see
-     every other story's saved localStorage entries. "Export All" walks
-     that shared storage instead of the filesystem — there's no external
-     script that could do this, since the markdown never lived in a file
-     to begin with, only in the browser's own storage. */
-  function collectAllStories(){
-    var prefix = 'devopslight:';
-    var bodySuffix = ':body';
+     every other story's saved records. "Export All" walks that shared
+     storage instead of the filesystem — there's no external script that
+     could do this, since the markdown never lived in a file to begin
+     with, only in the browser's own storage. */
+  async function collectAllStories(){
+    var records = [];
+    try{ records = await idbGetAll(); }catch(e){ /* storage blocked */ }
     var stories = [];
-    for(var i = 0; i < localStorage.length; i++){
-      var key = localStorage.key(i);
-      if(!key || key.indexOf(prefix) !== 0 || key.slice(-bodySuffix.length) !== bodySuffix) continue;
-      var ns = key.slice(prefix.length, key.length - bodySuffix.length);
-      var body = localStorage.getItem(key) || '';
-      var title = localStorage.getItem(prefix + ns + ':title') || '';
-      if(!body.trim() && !title.trim()) continue; // skip stories nobody ever wrote in
-      var path = ns;
-      try{ path = decodeURIComponent(ns); }catch(e){ /* leave as-is */ }
+    records.forEach(function(r){
+      var body = r.body || '';
+      var title = r.title || '';
+      if(!body.trim() && !title.trim()) return; // skip stories nobody ever wrote in
+      var path = r.ns;
+      try{ path = decodeURIComponent(r.ns); }catch(e){ /* leave as-is */ }
       stories.push({
         path: path,
         title: title,
         content: title ? '# ' + title + '\n\n' + body : body
       });
-    }
+    });
     return stories;
   }
 
@@ -650,7 +646,7 @@
       toast('This browser can\'t pick a folder — try Chrome or Edge for Export All.');
       return;
     }
-    var stories = collectAllStories();
+    var stories = await collectAllStories();
     if(!stories.length){
       toast('No saved stories found in this browser.');
       return;
@@ -1095,26 +1091,98 @@
   });
 
   /* ============================================================
-     PERSISTENCE (localStorage — no permission prompts, ever.
-     Export/Import above are the escape hatch to a real .md file.)
+     PERSISTENCE (IndexedDB — no permission prompts, ever, same as
+     localStorage, but a quota in the hundreds of MB to low GBs
+     instead of ~5-10MB. Embedded images/attachments as base64 add
+     up fast, and localStorage was the thing running out.
+     Export/Import above are still the escape hatch to a real .md file.)
   ============================================================ */
-  var LS_BODY = 'devopslight:' + STORAGE_NS + ':body';
-  var LS_TITLE = 'devopslight:' + STORAGE_NS + ':title';
-  var LS_UPDATED = 'devopslight:' + STORAGE_NS + ':updated';
+  var DB_NAME = 'devopslight';
+  var DB_STORE = 'docs';
+  var dbPromise = null;
+  function openDb(){
+    if(!dbPromise){
+      dbPromise = new Promise(function(resolve, reject){
+        if(!window.indexedDB){ reject(new Error('indexedDB unavailable')); return; }
+        var req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = function(){ req.result.createObjectStore(DB_STORE, {keyPath:'ns'}); };
+        req.onsuccess = function(){ resolve(req.result); };
+        req.onerror = function(){ reject(req.error); };
+      });
+    }
+    return dbPromise;
+  }
+  function idbGet(ns){
+    return openDb().then(function(db){
+      return new Promise(function(resolve, reject){
+        var req = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(ns);
+        req.onsuccess = function(){ resolve(req.result || null); };
+        req.onerror = function(){ reject(req.error); };
+      });
+    });
+  }
+  function idbPut(record){
+    return openDb().then(function(db){
+      return new Promise(function(resolve, reject){
+        var tx = db.transaction(DB_STORE, 'readwrite');
+        tx.objectStore(DB_STORE).put(record);
+        tx.oncomplete = function(){ resolve(); };
+        tx.onerror = function(){ reject(tx.error); };
+      });
+    });
+  }
+  function idbGetAll(){
+    return openDb().then(function(db){
+      return new Promise(function(resolve, reject){
+        var req = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).getAll();
+        req.onsuccess = function(){ resolve(req.result || []); };
+        req.onerror = function(){ reject(req.error); };
+      });
+    });
+  }
 
-  function loadFromStorage(){
-    els.filenamePill.textContent = DISPLAY_NAME + ' · saved in this browser';
-    var text = '';
-    try{ text = localStorage.getItem(LS_BODY) || ''; }catch(e){ /* storage blocked */ }
-    var title = '';
-    try{ title = localStorage.getItem(LS_TITLE) || ''; }catch(e){ /* storage blocked */ }
-    var updated = null;
+  /* One-time sweep: earlier versions of this app kept every story in
+     localStorage, which is what ran into the ~5-10MB browser cap.
+     Copy every devopslight:*:body/title/updated triple found there
+     into IndexedDB, then remove it, so old saved stories aren't lost
+     and the freed localStorage quota isn't just sitting there unused. */
+  var MIGRATION_FLAG = 'devopslight:migrated-to-idb';
+  function migrateLegacyStorage(){
+    var already = false;
+    try{ already = localStorage.getItem(MIGRATION_FLAG) === '1'; }catch(e){ already = true; }
+    if(already) return Promise.resolve();
+    var prefix = 'devopslight:';
+    var bodySuffix = ':body';
+    var keysToRemove = [];
+    var puts = [];
     try{
-      var raw = localStorage.getItem(LS_UPDATED);
-      if(raw) updated = new Date(raw);
+      for(var i = 0; i < localStorage.length; i++){
+        var key = localStorage.key(i);
+        if(!key || key.indexOf(prefix) !== 0 || key.slice(-bodySuffix.length) !== bodySuffix) continue;
+        var ns = key.slice(prefix.length, key.length - bodySuffix.length);
+        var body = localStorage.getItem(key) || '';
+        var title = localStorage.getItem(prefix + ns + ':title') || '';
+        var updated = localStorage.getItem(prefix + ns + ':updated') || null;
+        puts.push(idbPut({ ns: ns, body: body, title: title, updated: updated }));
+        keysToRemove.push(key, prefix + ns + ':title', prefix + ns + ':updated');
+      }
     }catch(e){ /* storage blocked */ }
-    state = { body: text };
-    docTitle = title;
+    return Promise.all(puts).then(function(){
+      try{
+        keysToRemove.forEach(function(k){ localStorage.removeItem(k); });
+        localStorage.setItem(MIGRATION_FLAG, '1');
+      }catch(e){ /* ignore */ }
+    }).catch(function(){ /* IndexedDB unavailable; leave legacy data in place, retry next load */ });
+  }
+
+  async function loadFromStorage(){
+    els.filenamePill.textContent = DISPLAY_NAME + ' · saved in this browser';
+    await migrateLegacyStorage();
+    var record = null;
+    try{ record = await idbGet(STORAGE_NS); }catch(e){ /* storage blocked */ }
+    var updated = record && record.updated ? new Date(record.updated) : null;
+    state = { body: record ? record.body || '' : '' };
+    docTitle = record ? record.title || '' : '';
     els.titleInput.value = docTitle;
     applyDocumentTitle();
     lastSavedAt = updated;
