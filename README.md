@@ -11,6 +11,8 @@ A markdown editor. One HTML file. Zero dependencies. Never phones home.
 Open it. Type. Ctrl+S. That's the whole product.
 ---
 
+**[Live Demo](https://x0ry.github.io/devopslight/devopslight.html)** — try it in your browser, no download needed.
+
 ![DevOpsLight screenshot](screenshot.png)
 
 This is just one .html file. Save it anywhere. Double-click it. It works.
