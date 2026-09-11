@@ -209,6 +209,8 @@
             <button class="md-tool-btn" data-cmd="task" title="Checklist">☑</button>
             <button class="md-tool-btn" data-cmd="table" title="Table">▦</button>
             <button class="md-tool-btn" data-cmd="hr" title="Horizontal rule">―</button>
+            <div class="md-tool-sep"></div>
+            <button class="md-tool-btn" data-cmd="template" title="Insert standup template">📋</button>
           </div>
 
           <div class="md-source-wrap">
@@ -819,6 +821,13 @@
     var newSelEnd = Math.max(newSelStart, en + totalDelta);
     replaceRange(lineStart, blockEnd, out.join('\n'), newSelStart, newSelEnd);
   }
+  function insertTemplate(){
+    var ta = els.source;
+    var template = '**Blockers**\n>none\n\n**Questions**\n>none\n\n**Comments**\n>none\n\n**Tasks**\n>none\n\n**Notes**\n>none\n';
+    var insert = template + (ta.value.length ? '\n' : '');
+    replaceRange(0, 0, insert, insert.length);
+    renderPreview(); updateWordCount(); markDirty();
+  }
   function dedentCurrentLine(){
     var ta = els.source;
     var s = ta.selectionStart;
@@ -844,7 +853,8 @@
     ol: function(){ insertAtLineStart('1. '); },
     task: function(){ insertAtLineStart('- [ ] '); },
     table: function(){ insertBlock('| Column 1 | Column 2 |\n| --- | --- |\n| value | value |\n'); },
-    hr: function(){ insertBlock('\n---\n'); }
+    hr: function(){ insertBlock('\n---\n'); },
+    template: function(){ insertTemplate(); }
   };
   document.querySelectorAll('.md-tool-btn[data-cmd]').forEach(function(btn){
     btn.addEventListener('click', function(){
