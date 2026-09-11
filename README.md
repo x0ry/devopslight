@@ -40,7 +40,7 @@ Copy the file, rename it, it opens blank. Every copy is its own document, tied t
 
 A wiki wants a server. A note app wants a subscription. A tracker wants your whole team's calendar. Sometimes you just need to write "Blockers: none" before standup.
 
-This is what's left after you cut all of that away: a textarea, a save button, a file that's actually yours. No framework, no build step.
+A file that's actually yours.. No framework, no build step, I think theres a reason they call it a SPA.
 
 ## License
 
